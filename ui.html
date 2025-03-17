@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Agrim AI Agentic Sales - UI</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    #leads-list {
+      border: 1px solid #ccc;
+      padding: 10px;
+      width: 300px;
+      float: left;
+      margin-right: 20px;
+    }
+    #email-section, #feedback-section {
+      margin-top: 20px;
+      clear: both;
+    }
+    .lead-item {
+      padding: 5px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+    }
+    .lead-item:hover {
+      background-color: #f9f9f9;
+    }
+    .box {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin: 10px 0;
+    }
+    button {
+      padding: 8px 12px;
+      font-size: 14px;
+      margin-right: 10px;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .selected {
+      background-color: #e6f3ff;
+    }
+    #error-message {
+      color: red;
+      margin: 10px 0;
+      padding: 10px;
+      background-color: #fff3f3;
+      border: 1px solid #ffcaca;
+      display: none;
+    }
+    .approval-box {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f5f5f5;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .button-group {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Agrim AI Agentic Sales - UI</h1>
+  
+  <div id="error-message"></div>
+  
+  <!-- Leads List Section -->
+  <div id="leads-list">
+    <h2>New Leads</h2>
+    <div id="leads-container"></div>
+  </div>
+  
+  <!-- Email Draft Section -->
+  <div id="email-section">
+    <h2>Email Draft</h2>
+    <div class="box">
+      <label for="email-subject">Subject:</label>
+      <input type="text" id="email-subject" style="width: 100%;">
+    </div>
+    <div class="box">
+      <label for="email-body">Body:</label>
+      <textarea id="email-body" rows="8" style="width: 100%;"></textarea>
+    </div>
+    <div class="box">
+      <label for="email-signature">Signature:</label>
+      <input type="text" id="email-signature" style="width: 100%;" value="Best regards,">
+    </div>
+    <button id="draft-button" onclick="draftEmail()">Draft Email</button>
+  </div>
+  
+  <!-- Feedback & Approval Section -->
+  <div id="feedback-section">
+    <h2>Feedback & Approval</h2>
+    <textarea id="feedback" rows="4" style="width: 100%;" placeholder="Enter feedback to improve the draft..."></textarea>
+    <div class="button-group">
+      <button id="update-button" onclick="updateDraft()">Update Draft with Feedback</button>
+      <button id="reset-button" onclick="resetFeedback()">Clear Feedback</button>
+    </div>
+    <div class="approval-box">
+      <label>
+        <input type="checkbox" id="approve-checkbox" onchange="toggleApproval()"> I approve this email for sending
+      </label>
+      <div class="button-group">
+        <button id="send-button" onclick="sendEmail()" disabled>Send Approved Email</button>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    let selectedLead = null;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 3;
+    
+    function showError(message) {
+      const errorDiv = document.getElementById('error-message');
+      errorDiv.textContent = message;
+      errorDiv.style.display = 'block';
+      setTimeout(() => {
+        errorDiv.style.display = 'none';
+      }, 5000);
+    }
+    
+    function toggleApproval() {
+      const approved = document.getElementById('approve-checkbox').checked;
+      document.getElementById('send-button').disabled = !approved;
+    }
+    
+    function resetFeedback() {
+      document.getElementById('feedback').value = '';
+      document.getElementById('approve-checkbox').checked = false;
+      toggleApproval();
+    }
+    
+    async function fetchLeads() {
+      try {
+        const response = await fetch('http://localhost:5000/api/leads');
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to fetch leads');
+        }
+        const leads = await response.json();
+        
+        if (!Array.isArray(leads)) {
+          throw new Error('Invalid leads data received');
+        }
+        
+        if (leads.length === 0) {
+          showError('No new leads found');
+        }
+        
+        displayLeads(leads);
+      } catch (error) {
+        console.error('Error:', error);
+        showError(error.message);
+      }
+    }
+    
+    function displayLeads(leads) {
+      const container = document.getElementById('leads-container');
+      container.innerHTML = "";
+      leads.forEach(lead => {
+        const div = document.createElement('div');
+        div.className = "lead-item";
+        div.textContent = `${lead.name || 'Unknown'} (${lead.email || 'No email'})`;
+        if (lead.requirements) {
+          const reqDiv = document.createElement('div');
+          reqDiv.style.fontSize = '0.9em';
+          reqDiv.style.color = '#666';
+          reqDiv.textContent = `Requirements: ${JSON.stringify(lead.requirements)}`;
+          div.appendChild(reqDiv);
+        }
+        div.onclick = () => selectLead(div, lead);
+        container.appendChild(div);
+      });
+    }
+
+    function selectLead(element, lead) {
+      const previousSelection = document.querySelector('.lead-item.selected');
+      if (previousSelection) {
+        previousSelection.classList.remove('selected');
+      }
+      
+      element.classList.add('selected');
+      selectedLead = lead;
+      attempts = 0;
+      
+      // Reset all fields
+      document.getElementById('email-subject').value = '';
+      document.getElementById('email-body').value = '';
+      document.getElementById('feedback').value = '';
+      document.getElementById('approve-checkbox').checked = false;
+      toggleApproval();
+    }
+    
+    async function draftEmail() {
+      if (!selectedLead) {
+        showError("Please select a lead first");
+        return;
+      }
+
+      const draftButton = document.getElementById('draft-button');
+      draftButton.disabled = true;
+      draftButton.textContent = 'Generating...';
+
+      try {
+        const response = await fetch('http://localhost:5000/api/draft-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(selectedLead)
+        });
+
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to generate draft');
+        }
+
+        document.getElementById('email-subject').value = data.subject;
+        document.getElementById('email-body').value = data.body;
+        resetFeedback();
+      } catch (error) {
+        console.error('Error:', error);
+        showError(error.message);
+      } finally {
+        draftButton.disabled = false;
+        draftButton.textContent = 'Draft Email';
+      }
+    }
+    
+    async function updateDraft() {
+      if (!selectedLead) {
+        showError("No lead selected");
+        return;
+      }
+
+      const feedback = document.getElementById('feedback').value.trim();
+      if (!feedback) {
+        showError("Please provide feedback to update the draft");
+        return;
+      }
+
+      if (attempts >= MAX_ATTEMPTS) {
+        showError(`Maximum update attempts (${MAX_ATTEMPTS}) reached. Please start with a new draft.`);
+        return;
+      }
+
+      const updateButton = document.getElementById('update-button');
+      updateButton.disabled = true;
+      updateButton.textContent = 'Updating...';
+
+      try {
+        const response = await fetch('http://localhost:5000/api/update-draft', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            subject: document.getElementById('email-subject').value,
+            body: document.getElementById('email-body').value,
+            feedback: feedback
+          })
+        });
+
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to update draft');
+        }
+
+        document.getElementById('email-subject').value = data.subject;
+        document.getElementById('email-body').value = data.body;
+        document.getElementById('feedback').value = '';
+        document.getElementById('approve-checkbox').checked = false;
+        toggleApproval();
+        
+        attempts++;
+        if (attempts >= MAX_ATTEMPTS) {
+          showError(`This is your last update attempt (${attempts}/${MAX_ATTEMPTS})`);
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        showError(error.message);
+      } finally {
+        updateButton.disabled = false;
+        updateButton.textContent = 'Update Draft with Feedback';
+      }
+    }
+    
+    async function sendEmail() {
+      if (!selectedLead) {
+        showError("No lead selected. Cannot send email.");
+        return;
+      }
+
+      if (!document.getElementById('approve-checkbox').checked) {
+        showError("Please approve the email before sending");
+        return;
+      }
+
+      const subject = document.getElementById('email-subject').value;
+      const body = document.getElementById('email-body').value;
+      const signature = document.getElementById('email-signature').value;
+
+      if (!subject || !body) {
+        showError("Subject and body cannot be empty");
+        return;
+      }
+
+      const sendButton = document.getElementById('send-button');
+      sendButton.disabled = true;
+      sendButton.textContent = 'Sending...';
+
+      try {
+        const response = await fetch('http://localhost:5000/api/send-email', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ...selectedLead,
+            subject: subject,
+            body: body + "\n\n" + signature,
+            approved: true
+          })
+        });
+
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to send email');
+        }
+
+        alert('Email sent successfully!');
+        
+        // Reset all fields
+        document.getElementById('feedback').value = '';
+        document.getElementById('email-subject').value = '';
+        document.getElementById('email-body').value = '';
+        document.getElementById('approve-checkbox').checked = false;
+        toggleApproval();
+        attempts = 0;
+        
+        // Refresh leads list
+        fetchLeads();
+      } catch (error) {
+        console.error('Error:', error);
+        showError(error.message);
+      } finally {
+        sendButton.disabled = false;
+        sendButton.textContent = 'Send Approved Email';
+      }
+    }
+    
+    fetchLeads();
+  </script>
+</body>
+</html>
