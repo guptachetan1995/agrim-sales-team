@@ -1,7 +1,3 @@
-Product Requirements Document (PRD)
-
-Title: Agrim AI Agentic Sales Team (AAST)
-
 Change History:
 - V1.0 (March 12, 2025) – Initial PRD creation by the team lead.
 
