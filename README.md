@@ -1,6 +1,6 @@
 # Agrim AI Agentic Sales Team
 
-This project implements a production-grade agentic sales team for Agrim AI. The agent processes new leads, leverages past AI project data, and uses the Groq LLM API to generate custom email drafts enhanced by historical project success. A human-in-loop feedback mechanism refines the draft until approval, and the final email is sent to the client.
+This project implements an agentic sales team for Agrim AI. The agent processes new leads, leverages past AI project data, and uses the Groq LLM API to generate custom email drafts enhanced by historical project success. A human-in-loop feedback mechanism refines the draft until approval, and the final email is sent to the client.
 
 ## Architecture
 
